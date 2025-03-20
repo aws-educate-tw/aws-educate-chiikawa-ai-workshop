@@ -1,0 +1,17 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+crawl4ai = "*"
+nest-asyncio = "*"
+line-bot-sdk = "*"
+flask = "*"
+python-dotenv = "*"
+boto3 = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.11"

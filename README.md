@@ -1,0 +1,1 @@
+# aws-chiikawa-ai-workshop
