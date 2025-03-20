@@ -124,4 +124,4 @@ def get_quiz_cos(user_id):
     )
     if 'Item' in response and 'quiz' in response['Item'] and 'cos' in response['Item']['quiz']:
         return response['Item']['quiz']['cos']
-    return Nones
+    return None
