@@ -1,9 +1,9 @@
 flask
 pydantic-core
 line-bot-sdk
-boto3
+langchain-aws
 langgraph
 langchain
-langchain-aws
 langgraph-checkpoint-aws
 python-dotenv
+boto3
