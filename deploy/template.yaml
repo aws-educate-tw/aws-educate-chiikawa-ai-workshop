@@ -102,8 +102,7 @@ Resources:
                 Resource: !GetAtt ConversationTable.Arn
               - Effect: Allow
                 Action:
-                  - bedrock:InvokeModel
-                  - bedrockAgent:InvokeAgent
+                  - bedrock:*
                 Resource: "*"
               - Effect: Allow
                 Action:
