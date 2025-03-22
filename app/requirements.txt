@@ -7,3 +7,4 @@ langchain
 langgraph-checkpoint-aws
 python-dotenv
 boto3
+pillow
