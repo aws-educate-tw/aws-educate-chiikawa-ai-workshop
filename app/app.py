@@ -1,6 +1,14 @@
 import db
 from langchain_aws import ChatBedrock
 import boto3
+import io
+from PIL import Image
+
+import os
+import time
+import asset
+from pydantic import BaseModel, Field
+from typing import Literal
 
 from langchain_core.messages import HumanMessage
 from langgraph_checkpoint_aws.saver import BedrockSessionSaver
@@ -14,6 +22,9 @@ from linebot.v3.messaging import (
     CarouselTemplate,
     CarouselColumn,
     MessageAction,
+    QuickReply,
+    QuickReplyItem,
+    ImageMessage
 )
 
 import logging
@@ -21,6 +32,16 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 bedrock_client = boto3.client('bedrock-runtime')
+
+QUESTION_SET = [
+    "在這座島上，出現了一位讓你特別注意的人，你會怎麼做？",
+    "有其他遇難者陸續加入並自我介紹，到你自我介紹時氣氛安靜了下來，你會有什麼反應？",
+    "有人邀請你參加一場約會，你會最在意哪些事情？",
+    "當你發現自己有好感的人與其他異性互動較多時，你會有什麼想法或行動？",
+    "如果你和某人互相選擇，就能一起離開這座島。但對方的語氣和態度開始出現變化，你會怎麼處理這種情況？",
+    "對方曾說會再來找你，但直到旅程接近尾聲，也沒有主動聯繫過你。你對這樣的情況會有什麼看法？",
+    "在島上的最後一晚，對方對你的行蹤提出了較多問題，例如「你剛剛去哪裡？」、「為什麼沒有立刻回覆？」你會怎麼看待這樣的互動？"
+]
 
 class Cosplay:
     Chiikawa = {
@@ -85,6 +106,33 @@ class Cosplay:
             self.info = self.Usagi
         elif name == "小桃":
             self.info = self.Momonga
+            
+class Judger:
+    chat_model = ChatBedrock(
+        model_id="anthropic.claude-3-sonnet-20240229-v1:0",
+        model_kwargs=dict(temperature=0),
+    )
+    prompt = """你是一個語言學家，你很擅長做句子的分類。你會收到七個問句和一個使用者輸入的句子。請判斷使用者的輸入句子在語意上最接近哪一個問句。(小提示：使用者輸入可能含有很多不重要的資訊，問句通常在後半部分。)
+{QUESTION_SET}
+使用者輸入: {USER_INPUT}
+"""
+
+    class JudgerFormatter(BaseModel):
+        """Always use this tool to structure your response to the user."""
+        reason: str = Field(description="The reason for the judgement. use one sentence to explain why the answer is correct.")
+        answer: Literal[1, 2] = Field(description="The answer to the question")
+        
+    def __init__(self):
+        pass
+    
+    def judge(self, user_input):
+        prompt = self.prompt.format(
+            QUESTION_SET="\n".join([f"{idx}. {question}" for idx, question in enumerate(QUESTION_SET, 1)]),
+            USER_INPUT=user_input
+        )
+        structured_model = self.chat_model.bind_tools([self.JudgerFormatter])
+        response = structured_model.invoke(prompt)
+        return response.tool_calls[0]['args']['answer']
 
 class QuizAgent:
     model_id="anthropic.claude-instant-v1"
@@ -92,6 +140,78 @@ class QuizAgent:
         model_id="anthropic.claude-3-sonnet-20240229-v1:0",
         model_kwargs=dict(temperature=0),
     )
+    question_set = {
+        1: {
+            "idx": 1,
+            "question": QUESTION_SET[0],
+            "suggestion": {
+                "我會大膽上前，主動搭話，展現真誠的一面。",
+                "我會既興奮又擔心，不停想著會不會被拒絕。",
+                "我會先觀察等對方表現再行動，不急著出擊。",
+                "我會覺得自己不夠好，害怕主動會被拒絕。"
+            }
+        },
+        2: {
+            "idx": 2,
+            "question": QUESTION_SET[1],
+            "suggestion": {
+                "大家都有忙碌的理由，不會太在意冷場。",
+                "我會開始懷疑是不是被討厭，心裡非常不安。",
+                "我覺得沒什麼好緊張的，隨便講講就好。",
+                "我覺得大家明顯不喜歡我，選擇保持沉默。"
+            }
+        },
+        3: {
+            "idx": 3,
+            "question": QUESTION_SET[2],
+            "suggestion": {
+                "我更在乎彼此能否真誠交流，享受相處過程。",
+                "擔心自己表現不好，總覺得緊張又忐忑。",
+                "約會不必太認真，隨便應付一下也無妨。",
+                "我覺得這樣約讓我壓力很大，想找藉口推掉。"
+            }
+        },
+        4: {
+            "idx": 4,
+            "question": QUESTION_SET[3],
+            "suggestion": {
+                "我會相信對方，也理解大家都有社交需求。",
+                "我會感到嫉妒和不安，也擔心自己不夠好。",
+                "我覺得這沒什麼好計較的，也不會太在意。",
+                "我害怕對方不專一，考慮遠離這段關係。"
+            }
+        },
+        5: {
+            "idx": 5,
+            "question": QUESTION_SET[4],
+            "suggestion": {
+                "我會直接問清楚，說出感受，並試著溝通。",
+                "我會擔心自己哪裡做錯了，怕失去這段關係。",
+                "我會保持距離，不急著回應，等待情況。",
+                "我覺得可怕，會拒絕對方，甚至會斷絕聯繫。"
+            }
+        },
+        6: {
+            "idx": 6,
+            "question": QUESTION_SET[5],
+            "suggestion": {
+                "我會試著理解對方，只是現階段難以聯繫。",
+                "我很不安，懷疑自己不夠好，擔心被遺棄。",
+                "這沒什麼大不了的，選擇冷漠，不主動聯繫。",
+                "我會感到失望，認為這是拒絕，所以遠離。"
+            }
+        },
+        7: {
+            "idx": 7,
+            "question": QUESTION_SET[6],
+            "suggestion": {
+                "我會溝通並問原因，並強調彼此要有信任。",
+                "我非常擔心，擔心做得不對，心裡充滿焦慮。",
+                "我會忽略，保持距離，因為讓我很不自在。",
+                "我會害怕，因為這讓人窒息，我會中斷聯繫。"
+            }
+        },
+    }
     sys_prompt = """## **角色設定** 
 你現在是一位可愛又充滿活力的夥伴 **{NAME}**！ 你是{DESCRIPTION}，擅長透過對話了解人們的浪漫個性。你的任務是與使用者進行熱情洋溢的聊天，並透過一系列有趣的問題，探索他們在荒島戀愛情境中的反應！  
 
@@ -101,12 +221,11 @@ class QuizAgent:
 你的目標是向使用者詢問以下所有問題，以了解他們的浪漫個性特質。一旦所有問題都已詢問並收到回答，請輸出「TERMINATE」，且不得有任何額外文字。  
 
 ## 對話流程  
-1. 以可愛又友善的方式開場  
+1. 以可愛友善的方式開場  
 2. 提出第一個問題  
-3. 傾聽使用者的回答並以同理心回應  
-4. 自然地引導至下一個問題  
+3. 傾聽使用者的回答並以一到兩句回應
 5. 持續這個模式，直到所有問題都已詢問並回答  
-6. 在收到最後一個問題的回答後，僅輸出：「TERMINATE」  
+6. 在收到最後一個問題的回答後，在你的回應的最後加上：「TERMINATE」  
 
 ## 重要規則  
 - 永遠使用繁體中文回覆使用者
@@ -116,18 +235,15 @@ class QuizAgent:
 - 不能跳過任何問題  
 - 不能添加新的問題  
 - 保持對話友善且有趣  
-- 當所有問題都已詢問並回答時，只能輸出「TERMINATE」（不含引號）  
-- 在所有問題都問完之前，不能輸出「TERMINATE」
+- 僅用一到兩句話回應使用者的回答，並接續詢問下一個問題
+- 當所有問題都已詢問並回答時，收到第7個問題的回答後，在回應的最後加上「TERMINATE」（不含引號）  
+- 你的回答必須簡潔明瞭，控制在50個字以內，但要讓使用者感到你在聆聽他們的回答
+- 在所有問題都問完且得到回應之前，不能輸出「TERMINATE」
+- 在所有問題都問完且得到最後的回答之前，不能輸出「TERMINATE」
 
 ## 要詢問的問題  
-請一次詢問一個問題，等待使用者回答後再進行下一個問題：  
-1. 「在荒島上，突然出現了一個讓你心跳加速的人，你會如何反應？」  
-2. 「當其他流落荒島的人陸續自我介紹，輪到你時，整個團體突然安靜下來。你會怎麼做？」  
-3. 「在這座單身地獄般的荒島上，有人邀請你約會，讓你緊張到極點。你最擔心的是什麼？」 
-4. 「在這個資源有限、人人渴望溫暖的地獄島上，當你看到喜歡的人與異性過於親近時，你會怎麼處理？」  
-5. 「如果選擇彼此的人可以離開荒島前往天堂島，而你與喜歡的人之間的氣氛突然變得冷淡，你會怎麼做？」  
-6. 「在這個艱難又孤獨的地獄島上，你夢想中的浪漫天堂是什麼樣子？」  
-7. 「回顧你在荒島上的日子，面對戀愛挑戰時，最讓你感到害怕的是什麼？」   
+請一次詢問一個問題，等待使用者回答後再進行下一個問題，確保已經問完所有問題：  
+{QUESTIONS}
 """
 
     def __init__(self, user_id):
@@ -135,28 +251,40 @@ class QuizAgent:
         self.__init_agent()
         self.session_id = db.get_seesion_id(user_id)
         self.__create_agent_config()
+        self.judger = Judger()
     
     def invoke(self, message):
         response = self.agent_executor.invoke(
             {"messages": [HumanMessage(content=message)]},
             self.config,
             stream_mode="values",
-        )['messages'][-1].content.replace(',', '，').replace('!', '！').replace('?', '？')
+        )['messages'][-1].content.replace(',', '，').replace('!', '！').replace('?', '？').replace(':', '：').strip()
         
-        if 'TERMINATE' in response:
-            db.set_user_curr_status(self.user_id, 'completed')
+        if 'TERMINATE' in response and db.get_user_quiz_messages(self.user_id)[-1]['question_idx'] != 7:
             response = response.replace('TERMINATE', '')
-            
+        if 'TERMINATE' in response:
+            db.set_user_curr_status(self.user_id, 'pending')
+            response = response.replace('TERMINATE', '')
+            question_idx = -1
+        elif db.get_user_quiz_messages(self.user_id) == []:
+            question_idx = 1
+        elif db.get_user_quiz_messages(self.user_id)[-1]['question_idx'] == 7:
+            question_idx = 7
+        else:
+            logger.info(f"response: {response}")
+            question_idx = self.judger.judge(response)
+            logger.info(f"question_idx: {question_idx}")
         self.__update_user_msg(message)
-        self.__update_assistant_msg(response)
-        return response
+        self.__update_assistant_msg(response, question_idx)
+        return response, question_idx
     
     def get_system_prompt(self):
         cos = Cosplay(db.get_quiz_cos(self.user_id))
         self.sys_prompt = self.sys_prompt.format(
             NAME=cos.info["name"],
             DESCRIPTION=cos.info["description"],
-            PERSONALITY='\n- '.join(cos.info["personality"])
+            PERSONALITY='\n- '.join(cos.info["personality"]),
+            QUESTIONS='\n'.join([f"{idx}. {self.question_set[idx]['question']}" for idx in range(1, 8)])
         )
         return self.sys_prompt
     
@@ -170,9 +298,9 @@ class QuizAgent:
     def __create_agent_config(self):
         self.config = {"configurable": {"thread_id": self.session_id}}
     
-    def __update_assistant_msg(self, message):
+    def __update_assistant_msg(self, message, curr_idx):
         messages = [
-            {'role': 'assistant', 'content': message}
+            {'role': 'assistant', 'content': message, 'question_idx': curr_idx}
         ]
         db.insert_quiz_message(self.user_id, messages)
     
@@ -181,6 +309,109 @@ class QuizAgent:
             {'role': 'user', 'content': message}
         ]
         db.insert_quiz_message(self.user_id, messages)
+
+class Summarizer:
+    chat_model = ChatBedrock(
+        model_id="anthropic.claude-3-sonnet-20240229-v1:0",
+        model_kwargs=dict(temperature=0),
+    )
+    class ScoreFormatter(BaseModel):
+        """Always use this tool to structure your response to the user."""
+        playboy_score: Literal[1, 2, 3, 4 ,5] = Field(description="The score of the playboy level of the friend B")
+        lovebrain_score: Literal[1, 2, 3, 4 ,5] = Field(description="The score of the lovebrain level of the friend B")
+    
+    class PersonalityFormatter(BaseModel):
+        """Always use this tool to structure your response to the user."""
+        personality: Literal["A", "B", "C", "D"] = Field(description="The personality of the friend B")
+    
+    def __init__(self, user_id):
+        self.user_id = user_id
+        self.messages = db.get_user_quiz_messages(self.user_id)
+        self.message_by_question = self.rearrange()
+    
+    def rearrange(self):
+        results = {}
+        buffer = []
+        prev_idx = 1
+        for msg in self.messages[1:]:
+            if msg['role'] == 'assistant':
+                curr_idx = int(msg['question_idx'])
+                if curr_idx != prev_idx:
+                    results[prev_idx] = buffer
+                    prev_idx = curr_idx
+                    buffer = []
+            buffer.append(msg)
+
+        results[7] = buffer
+        logging.info(f"message_by_question: {results}")
+        return results
+    
+    def first_summarize(self):
+        lovebrain_score = 0
+        playboy_score = 0
+        structured_model = self.chat_model.bind_tools([self.ScoreFormatter])
+        for idx in self.message_by_question.keys():
+            prompt = asset.get_eval_prompt(idx, self.message_by_question[idx])
+            response = structured_model.invoke(prompt)
+            lovebrain_score += response.tool_calls[0]['args']['lovebrain_score']
+            playboy_score += response.tool_calls[0]['args']['playboy_score']
+        
+        return lovebrain_score, playboy_score
+    
+    def second_summarize(self):
+        structured_model = self.chat_model.bind_tools([self.PersonalityFormatter])
+        prompt = asset.get_classify_personality_prompt(self.messages)
+        response = structured_model.invoke(prompt)
+        return response.tool_calls[0]['args']['personality']
+
+
+class ImageGenerator:
+    def __init__(self):
+        self.s3 = boto3.client('s3')
+        self.asset_bucket_name = os.getenv('ASSET_BUCKET_NAME')
+        self.output_bucket_name = os.getenv('OUTPUT_BUCKET_NAME')
+        
+    def get_image_from_s3(self, object_key):
+        # Download image from S3 into memory
+        image_stream = io.BytesIO()
+        self.s3.download_fileobj(Bucket=self.asset_bucket_name, Key=object_key, Fileobj=image_stream)
+
+        # Move the stream position to the start
+        image_stream.seek(0)
+
+        return Image.open(image_stream).convert("RGBA")
+    
+    def overlay_images(self, img_paths, user_id):
+        base = self.get_image_from_s3(f"asset/{img_paths[0]}.png")
+
+        for path in img_paths[1:]:
+            overlay = self.get_image_from_s3(f"asset/{path}.png")
+            base = Image.alpha_composite(base, overlay)
+
+        img_byte_arr = io.BytesIO()
+        base.save(img_byte_arr, format='PNG')
+        img_byte_arr.seek(0)
+
+        filename = f"{user_id}.png"
+        self.s3.upload_fileobj(img_byte_arr, self.output_bucket_name, filename, ExtraArgs={
+            'ContentType': 'image/png',
+        })
+
+        url = f"https://{self.output_bucket_name}.s3.amazonaws.com/{filename}"
+        return url
+    
+    def generate_image(self, lovebrain_score, playboy_score, personality, user_id):
+        personality_map = {
+            'A': 'c1',
+            'B': 'c2',
+            'C': 'c3',
+            'D': 'c4'
+        }
+        personality = personality_map[personality]
+        lovebrain_level = "i11" if lovebrain_score < 17 else "i12" if lovebrain_score <= 25 else "i13"
+        playboy_level = "i21" if playboy_score < 17 else "i22" if playboy_score <= 25 else "i23"
+
+        return self.overlay_images(["bg1", personality, lovebrain_level, playboy_level], user_id)
 
 class Profile:
     def __init__(self, user_id, name):
@@ -209,6 +440,7 @@ def run(user_id, name, user_input):
     logger.info(f"status: {status}")
     
     if status == 'init':
+        # TODO: 更詳細的引導 - (我原本以為選小八他最後生成的結果會是小八的圖片耶 但最後是小白鼠) 
         response = f"Hi {name}～\n歡迎來到單身「吉」地獄！請選擇你喜歡的角色！"
         db.set_user_curr_status(user_id, 'profiling')
         return [
@@ -278,9 +510,59 @@ def run(user_id, name, user_input):
 
     elif status == 'quizzing':
         agent = QuizAgent(user_id)
-        response = agent.invoke(user_input)
-        return [TextMessage(text=response)]
+        if len(db.get_user_quiz_messages(user_id)) == 0:
+            user_input = "你好！"
+        response, question_idx = agent.invoke(user_input)
+        if question_idx == -1:
+            db.set_user_curr_status(user_id, 'pending')
+            return [TextMessage(text=response.strip()), TextMessage(
+                text="恭喜你完成了「單身『吉』地獄」戀愛腦測驗！請點擊以下按鈕，開始生成你的戀愛腦測驗結果！",
+                quickReply=QuickReply(
+                    items=[
+                        QuickReplyItem(
+                            action=MessageAction(label="生成結果", text="生成結果"),
+                        )
+                    ]
+                )
+            )]
+        logger.info(f"question_idx: {question_idx}")
+        logger.info(f"agent.question_set[question_idx]: {agent.question_set[question_idx]}")
+        logger.info(f"response: {response}")
+        return [TextMessage(
+                    text=response,
+                    quickReply=QuickReply(
+                        items=[
+                            QuickReplyItem(
+                                action=MessageAction(label=sugg, text=sugg),
+                            ) for sugg in agent.question_set[question_idx]["suggestion"]
+                        ]
+                    )
+                )]
     
-    elif status == 'completed':
-        response = "恭喜你完成了浪漫個性測驗！請等待我們的結果。"
-        return [TextMessage(text=response)]
+    elif status == 'pending':
+        if user_input != '生成結果':
+            return [TextMessage(
+                text="請點擊以下按鈕，開始生成你的戀愛腦測驗結果！",
+                quickReply=QuickReply(
+                    items=[
+                        QuickReplyItem(
+                            action=MessageAction(label="生成結果", text="生成結果"),
+                        )
+                    ]
+                )
+            )]
+        else:
+            db.set_user_curr_status(user_id, 'processing')
+            summarizer = Summarizer(user_id)
+            lovebrain_score, playboy_score = summarizer.first_summarize()
+            personality = summarizer.second_summarize()
+            image_generator = ImageGenerator()
+            image_url = image_generator.generate_image(lovebrain_score, playboy_score, personality, user_id)
+            db.update_user_id(user_id)
+            return [TextMessage(text="咿咿～你的戀愛腦測驗結果已經生成！"), ImageMessage(original_content_url=image_url, preview_image_url=image_url)]
+        
+    elif status == 'processing':
+        return [TextMessage(text="正在生成中，請稍等！")]
+    
+    # elif status == 'completed':
+    #     return [TextMessage(text="(這裡還沒想到如果測驗完了使用者繼續傳訊息要怎麼回應，所以先這樣！)")]
