@@ -1,13 +1,13 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "CloudFormation template for Chiikawa Psychological Test LineBot Workshop resources"
+Description: "CloudFormation template for Chiikawa Psychological Test LINE Bot Workshop resources"
 
 Parameters:
   ProjectName:
     Type: String
-    Default: auto-chiikawa
+    Default: cody-auto-chiikawa
     Description: Project name for resource naming
 
-  # Line Bot Configuration when setting stack
+  # LINE Bot Configuration when setting stack
   ChannelAccessToken:
     Type: String
     Description: LINE Bot Channel Access Token
@@ -19,25 +19,37 @@ Parameters:
     NoEcho: true
 
 Resources:
-  # S3 Bucket for Lambda Code
-  LambdaCodeBucket:
+  # S3 Bucket for Assets
+  AssetsBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub ${ProjectName}-lambda-code
-      VersioningConfiguration:
-        Status: Enabled
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
+      BucketName: !Sub ${ProjectName}-static-assets-${AWS::AccountId}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedOrigins:
+              - "*"
+            MaxAge: 3600
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
 
   # S3 Bucket for Generated Images
   GeneratedImagesBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub ${ProjectName}-generated-images
+      BucketName: !Sub ${ProjectName}-generated-images-${AWS::AccountId}
       CorsConfiguration:
         CorsRules:
           - AllowedHeaders:
@@ -106,11 +118,10 @@ Resources:
                 Resource: "*"
               - Effect: Allow
                 Action:
-                  - s3:GetObject
-                  - s3:ListBucket
-                Resource:
-                  - !GetAtt LambdaCodeBucket.Arn
-                  - !Sub ${LambdaCodeBucket.Arn}/*
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - s3:GetObject
@@ -120,29 +131,27 @@ Resources:
                 Resource:
                   - !GetAtt GeneratedImagesBucket.Arn
                   - !Sub ${GeneratedImagesBucket.Arn}/*
+                  - !GetAtt AssetsBucket.Arn
+                  - !Sub ${AssetsBucket.Arn}/*
 
   # Lambda function for handling webhook requests
-  LineBotWebhookHandler:
+  LINEBotWebhookHandler:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Sub ${ProjectName}-linebot
-      Handler: lambda_function.lambda_handler
+      PackageType: Image
       Role: !GetAtt LambdaIAMRole.Arn
-      Code: # Prefered to use S3
-        ZipFile: |
-          def lambda_handler(event, context):
-            return {
-              'statusCode': 200,
-              'body': 'This is a dummy method, replace it.'
-            }
-      Runtime: python3.11
-      Timeout: 30
-      MemorySize: 256
+      Timeout: 60
+      MemorySize: 512
+      Architectures:
+        - arm64
       Environment:
         Variables:
           TABLE_NAME: !Ref ConversationTable
           CHANNEL_ACCESS_TOKEN: !Ref ChannelAccessToken
           CHANNEL_SECRET: !Ref ChannelSecret
+      Code:
+        ImageUri: !Sub 423623870189.dkr.ecr.us-east-1.amazonaws.com/2025-aws-chiikawa-ai-workshop@sha256:e7342215e3e0e15ec1d2095905ed69f14e0fe99ed34525e283abc88345043f39
 
   # API Gateway REST API
   ApiGateway:
@@ -162,7 +171,7 @@ Resources:
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LineBotWebhookHandler.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LINEBotWebhookHandler.Arn}/invocations
 
   # API Gateway deployment
   ApiDeployment:
@@ -184,43 +193,14 @@ Resources:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !Ref LineBotWebhookHandler
+      FunctionName: !Ref LINEBotWebhookHandler
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/POST/
-
-  # SageMaker Notebook Instance Role
-  NotebookInstanceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub ${ProjectName}-notebook-role
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: sagemaker.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
-        - arn:aws:iam::aws:policy/AmazonBedrockFullAccess
-
-  # SageMaker Notebook Instance
-  NotebookInstance:
-    Type: AWS::SageMaker::NotebookInstance
-    Properties:
-      NotebookInstanceName: !Sub ${ProjectName}-notebook
-      InstanceType: ml.t3.medium
-      RoleArn: !GetAtt NotebookInstanceRole.Arn
-      VolumeSizeInGB: 5
 
 Outputs:
   ApiEndpoint:
     Description: API Gateway endpoint URL
     Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod
-
-  NotebookInstanceUrl:
-    Description: URL for the SageMaker Notebook Instance
-    Value: !Sub https://console.aws.amazon.com/sagemaker/home?region=${AWS::Region}#/notebook-instances/openNotebook/${ProjectName}-notebook
 
   DynamoDBTableName:
     Description: Name of the DynamoDB table
@@ -228,4 +208,4 @@ Outputs:
 
   LambdaFunctionName:
     Description: Name of the Lambda function
-    Value: !Ref LineBotWebhookHandler
+    Value: !Ref LINEBotWebhookHandler
