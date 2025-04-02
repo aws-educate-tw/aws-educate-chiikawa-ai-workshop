@@ -1,0 +1,215 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "CloudFormation template for Chiikawa Psychological Test LINE Bot Workshop resources"
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: cody-auto-chiikawa
+    Description: Project name for resource naming
+
+  # LINE Bot Configuration when setting stack
+  ChannelAccessToken:
+    Type: String
+    Description: LINE Bot Channel Access Token
+    NoEcho: true
+
+  ChannelSecret:
+    Type: String
+    Description: LINE Bot Channel Secret
+    NoEcho: true
+
+Resources:
+  # S3 Bucket for Assets
+  AssetsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub ${ProjectName}-static-assets-${AWS::AccountId}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedOrigins:
+              - "*"
+            MaxAge: 3600
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  # S3 Bucket for Generated Images
+  GeneratedImagesBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub ${ProjectName}-generated-images-${AWS::AccountId}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedOrigins:
+              - "*"
+            MaxAge: 3600
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  # DynamoDB Table
+  ConversationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${ProjectName}-conversations
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # IAM Role for Lambda functions
+  LambdaIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-lambda-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub ${ProjectName}-lambda-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                Resource: !GetAtt ConversationTable.Arn
+              - Effect: Allow
+                Action:
+                  - bedrock:*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                  - s3:DeleteObject
+                Resource:
+                  - !GetAtt GeneratedImagesBucket.Arn
+                  - !Sub ${GeneratedImagesBucket.Arn}/*
+                  - !GetAtt AssetsBucket.Arn
+                  - !Sub ${AssetsBucket.Arn}/*
+
+  # Lambda function for handling webhook requests
+  LINEBotWebhookHandler:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-linebot
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaIAMRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      Runtime: python3.11
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ConversationTable
+          CHANNEL_ACCESS_TOKEN: !Ref ChannelAccessToken
+          CHANNEL_SECRET: !Ref ChannelSecret
+      Code: # For Development
+         ZipFile: |
+           def lambda_handler(event, context):
+             return {
+               'statusCode': 200,
+               'body': 'This is a dummy method, replace it.'
+             }
+
+  # API Gateway REST API
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub ${ProjectName}-api
+      Description: API for Chiikawa psychological test LineBot
+
+  # API Gateway method
+  RootMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !GetAtt ApiGateway.RootResourceId
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LINEBotWebhookHandler.Arn}/invocations
+
+  # API Gateway deployment
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: RootMethod
+    Properties:
+      RestApiId: !Ref ApiGateway
+
+  # API Gateway stage
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref ApiGateway
+      DeploymentId: !Ref ApiDeployment
+      StageName: prod
+
+  # Lambda permission for API Gateway
+  WebhookHandlerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LINEBotWebhookHandler
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/POST/
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod
+
+  DynamoDBTableName:
+    Description: Name of the DynamoDB table
+    Value: !Ref ConversationTable
+
+  LambdaFunctionName:
+    Description: Name of the Lambda function
+    Value: !Ref LINEBotWebhookHandler
