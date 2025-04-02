@@ -1,6 +1,7 @@
 import os
 import boto3
 from boto3.dynamodb.conditions import Attr
+from datetime import datetime
 
 dynamodb = boto3.resource('dynamodb')
 table_name = os.getenv('TABLE_NAME')
@@ -34,6 +35,26 @@ def init_user_data(user_id, user_name, session_id):
     response = table.put_item(Item=item)
     logger.info(f"init_user_data: {response}...")
     return response
+
+def update_user_id(user_id):
+    table = dynamodb.Table(table_name)
+    
+    response = table.get_item(Key={'user_id': user_id})
+    if 'Item' not in response:
+        logger.error(f"No item found for user_id: {user_id}")
+        return None
+    
+    old_item = response['Item']
+    
+    new_user_id = f"{user_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    old_item['user_id'] = new_user_id
+    put_response = table.put_item(Item=old_item)
+    
+    delete_response = table.delete_item(Key={'user_id': user_id})
+    
+    logger.info(f"user_id changed from {user_id} to {new_user_id}")
+    return put_response
+
 
 def insert_quiz_message(user_id, messages):
     table = dynamodb.Table(table_name)
