@@ -13,9 +13,10 @@ from linebot.v3.messaging import (
     ReplyMessageRequest,
 )
 from linebot.v3.webhooks import (
-  MessageEvent,
-  TextMessageContent,
-  FollowEvent
+    MessageEvent,
+    TextMessageContent,
+    StickerMessageContent, # 新增的代碼
+    FollowEvent
 )
 import urllib.request
 
@@ -27,11 +28,23 @@ logger.setLevel(logging.INFO)
 configuration = Configuration(access_token=os.getenv('CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 
-@handler.add(MessageEvent, message=TextMessageContent)
+
+# 使用單一通用處理器
+@handler.add(MessageEvent)
 def handle_message(event):
     user_id = event.source.user_id
-    user_message = event.message.text
     
+    # 統一處理不同消息類型
+    if isinstance(event.message, TextMessageContent):
+        user_message = event.message.text
+    elif isinstance(event.message, StickerMessageContent):
+        sticker_id = event.message.sticker_id
+        package_id = event.message.package_id
+        user_message = f"[STICKER] package_id={package_id}, sticker_id={sticker_id}"
+    else:
+        user_message = "[不支持的消息類型]"
+    
+    # 處理流程相同
     profile_url = f'https://api.line.me/v2/bot/profile/{user_id}'
     headers = {
         'Authorization': f'Bearer {os.getenv("CHANNEL_ACCESS_TOKEN")}'

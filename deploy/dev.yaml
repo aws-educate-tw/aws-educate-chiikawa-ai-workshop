@@ -139,19 +139,23 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Sub ${ProjectName}-linebot
-      PackageType: Image
+      Handler: lambda_function.lambda_handler
       Role: !GetAtt LambdaIAMRole.Arn
       Timeout: 60
       MemorySize: 512
-      Architectures:
-        - arm64
+      Runtime: python3.11
       Environment:
         Variables:
           TABLE_NAME: !Ref ConversationTable
           CHANNEL_ACCESS_TOKEN: !Ref ChannelAccessToken
           CHANNEL_SECRET: !Ref ChannelSecret
-      Code:
-        ImageUri: !Sub 423623870189.dkr.ecr.us-east-1.amazonaws.com/2025-aws-chiikawa-ai-workshop@sha256:e7342215e3e0e15ec1d2095905ed69f14e0fe99ed34525e283abc88345043f39
+      Code: # For Development
+         ZipFile: |
+           def lambda_handler(event, context):
+             return {
+               'statusCode': 200,
+               'body': 'This is a dummy method, replace it.'
+             }
 
   # API Gateway REST API
   ApiGateway:
