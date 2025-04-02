@@ -149,13 +149,15 @@ Resources:
           TABLE_NAME: !Ref ConversationTable
           CHANNEL_ACCESS_TOKEN: !Ref ChannelAccessToken
           CHANNEL_SECRET: !Ref ChannelSecret
+          ASSET_BUCKET_NAME: !Ref AssetsBucket
+          OUTPUT_BUCKET_NAME: !Ref GeneratedImagesBucket
       Code: # For Development
-         ZipFile: |
-           def lambda_handler(event, context):
-             return {
-               'statusCode': 200,
-               'body': 'This is a dummy method, replace it.'
-             }
+        ZipFile: |
+          def lambda_handler(event, context):
+            return {
+              'statusCode': 200,
+              'body': 'This is a dummy method, replace it.'
+            }
 
   # API Gateway REST API
   ApiGateway:
