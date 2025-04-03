@@ -296,7 +296,7 @@ def run(user_id, name, user_input):
             ]
         response = agent.invoke(user_input)
         output = [TextMessage(text=response,)]
-        if len(db.get_user_quiz_messages(user_id)) > 4:
+        if len(db.get_user_quiz_messages(user_id)) > 10:
             output[0].quick_reply = QuickReply(
                 items=[
                     QuickReplyItem(
