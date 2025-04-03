@@ -3,6 +3,7 @@ from langchain_aws import ChatBedrock
 import boto3
 import io
 from PIL import Image
+import logging
 
 import os
 import time
@@ -34,34 +35,15 @@ class Summarizer:
     def __init__(self, user_id):
         self.user_id = user_id
         self.messages = db.get_user_quiz_messages(self.user_id)
-        self.message_by_question = self.rearrange()
-    
-    def rearrange(self):
-        results = {}
-        buffer = []
-        prev_idx = 1
-        for msg in self.messages[1:]:
-            if msg['role'] == 'assistant':
-                curr_idx = int(msg['question_idx'])
-                if curr_idx != prev_idx:
-                    results[prev_idx] = buffer
-                    prev_idx = curr_idx
-                    buffer = []
-            buffer.append(msg)
-
-        results[7] = buffer
-        logging.info(f"message_by_question: {results}")
-        return results
     
     def first_summarize(self):
         lovebrain_score = 0
         playboy_score = 0
         structured_model = self.chat_model.bind_tools([self.ScoreFormatter])
-        for idx in self.message_by_question.keys():
-            prompt = asset.get_eval_prompt(idx, self.message_by_question[idx])
-            response = structured_model.invoke(prompt)
-            lovebrain_score += response.tool_calls[0]['args']['lovebrain_score']
-            playboy_score += response.tool_calls[0]['args']['playboy_score']
+        prompt = asset.get_eval_prompt(self.messages)
+        response = structured_model.invoke(prompt)
+        lovebrain_score = response.tool_calls[0]['args']['lovebrain_score']
+        playboy_score = response.tool_calls[0]['args']['playboy_score']
         
         return lovebrain_score, playboy_score
     
@@ -115,16 +97,17 @@ class ImageGenerator:
             'D': 'c4'
         }
         personality = personality_map[personality]
-        lovebrain_level = "i11" if lovebrain_score < 17 else "i12" if lovebrain_score <= 25 else "i13"
-        playboy_level = "i21" if playboy_score < 17 else "i22" if playboy_score <= 25 else "i23"
+        lovebrain_level = "i11" if lovebrain_score <= 2  else "i12" if lovebrain_score == 3 else "i13"
+        playboy_level = "i21" if playboy_score <= 2 else "i22" if playboy_score == 3 else "i23"
 
         return self.overlay_images(["bg1", personality, lovebrain_level, playboy_level], user_id)
     
 def get_quiz_result(user_id):
+    db.set_user_curr_status(user_id, 'processing')
     summarizer = Summarizer(user_id)
     lovebrain_score, playboy_score = summarizer.first_summarize()
     personality = summarizer.second_summarize()
 
     image_generator = ImageGenerator()
     image_url = image_generator.generate_image(lovebrain_score, playboy_score, personality, user_id)
-    return f"您的LoveBrain分數為{lovebrain_score}，Playboy分數為{playboy_score}，您的性格為{personality}，請點擊以下連結查看您的分析結果：{image_url}"
+    return image_url

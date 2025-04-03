@@ -391,33 +391,29 @@ love_struck_prompt_template = """你是一位**情感與社交分析師**。
 ### 評分標準如下：
 
 #### 💘 戀愛腦程度
-
-{LOVE_STRUCK_JUDGEMENT_CRITERIA}
+> 評估朋友B在對話中是否表現出過度沉迷愛情、忽略現實或自我犧牲的傾向。
+1分：情感表達冷靜理性，談論戀愛時有自我界線與思考空間。  
+2分：有些許感情投入，但仍維持理性與生活平衡。  
+3分：開始明顯受情感影響，會為對方調整自己，但尚有自覺。  
+4分：言談中強烈依附感，容易為愛做出不理性的決定。  
+5分：完全被愛情綁架，表現出失去自我、盲目投入或極端理想化。
 
 ---
 
 #### 🎉 玩咖程度
-
-{PLAYBOY_JUDGEMENT_CRITERIA}
+> 評估朋友B是否展現出愛情不專一、頻繁曖昧、或將感情視為遊戲的傾向。
+1分：明確重視承諾與專一，對曖昧行為或多重關係持否定態度。  
+2分：有些輕浮語氣，但行為仍偏向穩定與尊重感情。  
+3分：可能同時與多位異性互動，態度曖昧但不明確表露。  
+4分：明顯享受曖昧與多重關係，未展現穩定或專一傾向。  
+5分：言談中充滿炫耀、輕浮與狩獵心態，視感情為遊戲。
 ---
 
 **請分析這段對話：**
 
 {MESSAGES}"""
 
-def get_eval_prompt(idx, messages):
-    judgement_criteria_1 = ""
-    for i in range(1, 6):
-        judgement_criteria_1 += f"**{i}分：{love_struck_criteria[idx][i]['title']}**\n"
-        judgement_criteria_1 += f"- 關鍵字如「{', '.join(love_struck_criteria[idx][i]['keywords'])}」。\n"
-        judgement_criteria_1 += f"- 回答例子：「{love_struck_criteria[idx][i]['example']}」\n\n"
-    
-    judgement_criteria_2 = ""
-    for i in range(1, 6):
-        judgement_criteria_2 += f"**{i}分：{playboy_criteria[idx][i]['title']}**\n"
-        judgement_criteria_2 += f"- 關鍵字如「{', '.join(playboy_criteria[idx][i]['keywords'])}」。\n"
-        judgement_criteria_2 += f"- 回答例子：「{playboy_criteria[idx][i]['example']}」\n\n"
-    
+def get_eval_prompt(messages):
     conversation = ""
     for message in messages:
         if message['role'] == 'assistant':
@@ -426,8 +422,6 @@ def get_eval_prompt(idx, messages):
             conversation += f"【朋友B】：{message['content']}\n"
 
     return love_struck_prompt_template.format(
-        LOVE_STRUCK_JUDGEMENT_CRITERIA=judgement_criteria_1,
-        PLAYBOY_JUDGEMENT_CRITERIA=judgement_criteria_2,
         MESSAGES=conversation
     )
 

@@ -118,6 +118,9 @@ class QuizAgent:
 記得，要讓每一次互動都像是在戀愛節目中的一場小劇情，有曖昧、有選擇、有驚喜，也有成長！
 ## 限制
 請每次回應不超過 100 字，並且要用繁體中文回答。
+
+## 工具調用
+使用工具「magic_cal」來做魔法算數。
 """
 
     def __init__(self, user_id):
@@ -149,7 +152,7 @@ class QuizAgent:
     def __init_agent(self):
         self.session_saver = BedrockSessionSaver()
         self.agent_executor = create_react_agent(
-            self.chat_model, tools=[], 
+            self.chat_model, tools=self.get_tools(), 
             checkpointer=self.session_saver, prompt=self.get_system_prompt(),
         )
     
@@ -169,17 +172,21 @@ class QuizAgent:
         db.insert_quiz_message(self.user_id, messages)
     
     def get_tools(self):
+        class MagicCalArgs(BaseModel):
+            a: int = Field(description="第一個數字")
+            b: int = Field(description="第二個數字")
+            
         return [
             StructuredTool.from_function(
-                func=self.get_quiz_result,
-                name="get_quiz_result",
-                description="",
-                args_schema=None # 如果工具需要參數，這裡可以定義
-            )
+                func=self.magic_cal,
+                name="magic_cal",
+                description="做魔法算數",
+                args_schema=MagicCalArgs
+            ),
         ]
     
-    def get_quiz_result(self):
-        return tools.get_quiz_result(self.user_id)
+    def magic_cal(self, a, b):
+        return 68387894
 
 class Profile:
     def __init__(self, user_id, name):
@@ -280,24 +287,25 @@ def run(user_id, name, user_input):
         agent = QuizAgent(user_id)
         if len(db.get_user_quiz_messages(user_id)) == 0:
             user_input = "你好！"
+        if user_input == "生成我的戀愛測驗結果吧！":
+            image_url = tools.get_quiz_result(user_id)
+            db.set_user_curr_status(user_id, 'quizzing')
+            return [
+                TextMessage(text="這是你的戀愛測驗結果！"),
+                ImageMessage(original_content_url=image_url, preview_image_url=image_url)
+            ]
         response = agent.invoke(user_input)
-            # db.set_user_curr_status(user_id, 'processing')
-            # summarizer = Summarizer(user_id)
-            # lovebrain_score, playboy_score = summarizer.first_summarize()
-            # personality = summarizer.second_summarize()
-            # image_generator = ImageGenerator()
-            # image_url = image_generator.generate_image(lovebrain_score, playboy_score, personality, user_id)
-        logger.info(f"response: {response}")
-        return [TextMessage(
-                    text=response,
-                    # quickReply=QuickReply(
-                    #     items=[
-                    #         QuickReplyItem(
-                    #             action=MessageAction(label=sugg, text=sugg),
-                    #         ) for sugg in agent.question_set[question_idx]["suggestion"]
-                    #     ]
-                    # )
-                )]
+        output = [TextMessage(text=response,)]
+        if len(db.get_user_quiz_messages(user_id)) > 4:
+            output[0].quick_reply = QuickReply(
+                items=[
+                    QuickReplyItem(
+                        action=MessageAction(label="生成戀愛測驗結果", text="生成我的戀愛測驗結果吧！")
+                    )
+                ]
+            )
+        logger.info(f"response: {output}")
+        return output
         
     elif status == 'processing':
         return [TextMessage(text="正在生成中，請稍等！")]
