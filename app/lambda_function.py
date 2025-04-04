@@ -15,7 +15,7 @@ from linebot.v3.messaging import (
 from linebot.v3.webhooks import (
     MessageEvent,
     TextMessageContent,
-    StickerMessageContent, # 新增的代碼
+    StickerMessageContent,
     FollowEvent
 )
 import urllib.request
@@ -44,7 +44,6 @@ def handle_message(event):
     else:
         user_message = "[不支持的消息類型]"
     
-    # 處理流程相同
     profile_url = f'https://api.line.me/v2/bot/profile/{user_id}'
     headers = {
         'Authorization': f'Bearer {os.getenv("CHANNEL_ACCESS_TOKEN")}'
