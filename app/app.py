@@ -7,9 +7,11 @@ from PIL import Image
 import os
 import time
 import asset
+import requests
+import json
 from pydantic import BaseModel, Field
 from langchain.tools import StructuredTool, tool
-from typing import Literal
+from typing import List, Dict, Optional, Union, Literal
 import tools
 
 from langchain_core.messages import HumanMessage
@@ -171,11 +173,38 @@ class QuizAgent:
         ]
         db.insert_quiz_message(self.user_id, messages)
     
+        
     def get_tools(self):
         class MagicCalArgs(BaseModel):
             a: int = Field(description="第一個數字")
             b: int = Field(description="第二個數字")
+        
+        class WeatherArgs(BaseModel):
+            city: Literal[
+                '臺北市', '新北市', '桃園市', '臺中市', '臺南市', '高雄市',
+                '基隆市', '新竹市', '嘉義市', '新竹縣', '苗栗縣', 
+                '彰化縣', '南投縣', '雲林縣', '嘉義縣', '屏東縣',
+                '宜蘭縣', '花蓮縣', '臺東縣', '澎湖縣', '金門縣', '連江縣'
+            ] = Field(description="台灣縣市名稱") 
             
+   
+        class MapArgs(BaseModel):
+            # 直接在這裡定義 Literal 類型
+            PlaceType = Literal["restaurant", "cafe", "bar", "park", "movie_theater", 
+                            "amusement_park", "art_gallery", "museum", 
+                            "shopping_mall", "tourist_attraction"]
+        
+            PriceLevel = Literal[0, 1, 2, 3, 4]  # 0:免費 1:便宜 2:適中 3:昂貴 4:非常昂貴
+      
+            """地圖搜尋參數模型"""
+            location: str = Field(..., description="位置名稱或地址，可使用自然語言，例如「台南魯肉飯」、「西門町附近的鞋店」")
+            radius: int = Field(1000, description="搜尋半徑（米）- 固定為1000米", ge=100, le=50000)
+            type: Optional[PlaceType] = Field(None, description="場所類型，如restaurant、cafe、park等")
+            keyword: Optional[str] = Field(None, description="關鍵字搜尋")
+            min_rating: float = Field(3.0, description="最低評分（0-5）", ge=0, le=5)
+            price_level: Optional[PriceLevel] = Field(None, description="價格等級（0-4，0=免費, 4=非常昂貴）")
+            open_now: bool = Field(True, description="是否僅顯示營業中的場所")
+        
         return [
             StructuredTool.from_function(
                 func=self.magic_cal,
@@ -183,11 +212,189 @@ class QuizAgent:
                 description="做魔法算數",
                 args_schema=MagicCalArgs
             ),
+            StructuredTool.from_function(
+                func=self.get_weather,
+                name="get_weather",
+                description="取得指定台灣城市的天氣資訊",
+                args_schema=WeatherArgs
+            ),
+            StructuredTool.from_function(
+                func=self.get_map,
+                name="get_map", 
+                description="搜尋約會場所和餐廳",
+                args_schema=MapArgs
+            )
         ]
     
     def magic_cal(self, a, b):
         return 68387894
 
+    def get_weather(self, city: str) -> str:
+        """取得指定城市的天氣資訊"""
+        API_KEY = "CWA-EB96FFE2-71E5-4C02-B1D3-240C1C4805EB"
+        API_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001"  # 假設 API 端點
+
+        params = {
+            "Authorization": API_KEY,
+            "locationName": city  # 目標城市
+        }
+
+        try:
+            response = requests.get(API_URL, params=params, timeout=10)
+            
+            if response.status_code != 200:
+                return f"無法獲取天氣資訊，錯誤碼: {response.status_code}"
+
+            data = response.json()
+            
+            try:
+                location_data = next(
+                    loc for loc in data["records"]["location"] if loc["locationName"] == city
+                )
+                
+                weather_elements = location_data["weatherElement"]
+                weather_report = {}
+
+                for element in weather_elements:
+                    element_name = element["elementName"]
+                    forecast_time = element["time"][0]  # 取最近的預報資料
+                    value = forecast_time["parameter"]["parameterName"]
+                    unit = forecast_time["parameter"].get("parameterUnit", "")
+                    weather_report[element_name] = f"{value} {unit}".strip()
+
+                return weather_report
+
+            except (KeyError, StopIteration):
+                return "無法找到該城市的天氣資訊"
+                
+        except requests.exceptions.RequestException as e:
+            return f"連接天氣服務失敗: {str(e)}"
+        
+        
+    def get_map(self, location: str, radius: int = 1000, type: Optional[str] = None, keyword: Optional[str] = None, min_rating: float = 4.0, price_level: Optional[int] = None, open_now: bool = True) -> List[Dict]:
+        """搜尋約會場所和餐廳
+        
+        參數:
+            location: 位置名稱或地址 (可使用自然語言，例如「台南魯肉飯」、「西門町附近的鞋店」)
+            radius: 搜尋半徑（米）- 固定為1000米
+            type: 場所類型，限定在 restaurant, cafe, bar, park 等特定類型
+            keyword: 關鍵字搜尋
+            min_rating: 最低評分（0-5）
+            price_level: 價格等級（0-4，0=免費, 4=非常昂貴）
+            open_now: 是否僅顯示營業中的場所
+            
+        返回:
+            符合條件的場所列表，包含店家介紹和詳細資訊
+        """
+        # 使用Text Search API直接搜尋地點
+        # 構建查詢字符串
+        API_KEY = "AIzaSyAu3hR8Izb_qLRKkxvXMjRggXZmyJ5km88"
+        BASE_URL = "https://maps.googleapis.com/maps/api/place"
+        TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
+
+        query = location
+        if type:
+            query += f" {type}"
+        if keyword:
+            query += f" {keyword}"
+        
+        # 設置請求頭和主體
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': API_KEY,
+            'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.priceLevel,places.id,places.photos,places.types,places.editorialSummary,places.googleMapsUri,places.websiteUri'
+        }
+        
+        payload = {
+            "textQuery": query,
+            "languageCode": "zh-TW"
+        }
+        
+        # 如果open_now為True，添加相應參數
+        if open_now:
+            payload["openNow"] = True
+        
+        # 發送請求
+        response = requests.post(TEXT_SEARCH_URL, headers=headers, data=json.dumps(payload))
+        
+        # 檢查響應狀態
+        if response.status_code != 200:
+            return [{"error": f"搜尋失敗: {response.status_code} - {response.text}"}]
+        
+        data = response.json()
+        
+        # 如果沒有找到結果
+        if 'places' not in data or not data['places']:
+            return [{"error": f"無法找到相關地點: {query}"}]
+        
+        # 處理結果
+        results = []
+        for place in data.get('places', []):
+            # 評分過濾
+            if 'rating' in place and place['rating'] < min_rating:
+                continue
+                
+            # 價格過濾
+            if price_level is not None and 'priceLevel' in place and place['priceLevel'] != price_level:
+                continue
+                
+            # 從place.id中提取PLACE_ID
+            place_id = place['id'].split('/')[-1] if 'id' in place else ""
+            
+            # 建立結構化資料
+            place_info = {
+                "name": place.get('displayName', {}).get('text', "未知名稱"),
+                "address": place.get('formattedAddress', "未知地址"),
+                "rating": place.get('rating', "無評分"),
+                "total_ratings": place.get('userRatingCount', 0),
+                "price_level": place.get('priceLevel', "未標示"),
+                "place_id": place_id,
+                "types": place.get('types', []),
+            }
+            
+            # 添加店家介紹（如果有）
+            if 'editorialSummary' in place and place['editorialSummary'].get('text'):
+                place_info["description"] = place['editorialSummary']['text']
+            else:
+                place_info["description"] = "暫無店家介紹"    
+
+            # 添加Google地圖連結（如果有）
+            if 'googleMapsUri' in place:
+                place_info["maps_url"] = place['googleMapsUri']
+            
+            # 添加店家網站連結（如果有）
+            if 'websiteUri' in place:
+                place_info["website"] = place['websiteUri']
+            
+            # 添加顧客評價（如果有）
+            if 'reviews' in place and place['reviews']:
+                place_info["reviews"] = []
+                for review in place['reviews'][:3]:  # 只取前3則評價
+                    review_info = {
+                        "rating": review.get('rating', 0),
+                        "text": review.get('text', {}).get('text', "無評價內容"),
+                        "time": review.get('relativePublishTimeDescription', "未知時間"),
+                        "author": review.get('authorAttribution', {}).get('displayName', "匿名用戶")
+                    }
+                    place_info["reviews"].append(review_info)
+            
+            # 添加地理位置信息（如果有）
+            if 'location' in place:
+                place_info["location"] = {
+                    "lat": place['location']['latitude'],
+                    "lng": place['location']['longitude']
+                }
+            
+            # 添加照片URL（如果有）
+            if 'photos' in place and place['photos']:
+                photo_name = place['photos'][0]['name']
+                photo_id = photo_name.split('/')[-1]
+                place_info["photo"] = f"{BASE_URL}/photo?maxwidth=400&photo_reference={photo_id}&key={API_KEY}"
+            
+            results.append(place_info)
+                
+        return results
+            
 class Profile:
     def __init__(self, user_id, name):
         self.user_id = user_id
