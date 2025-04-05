@@ -11,7 +11,7 @@ class WeatherArgs(BaseModel):
     ] = Field(description="台灣縣市名稱")
 
 def get_weather(city: str) -> str:
-    API_KEY = "CWA-EB96FFE2-71E5-4C02-B1D3-240C1C4805EB"
+    API_KEY = "API_KEY"
     API_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001"
 
     params = {
