@@ -14,7 +14,8 @@ from langchain.tools import StructuredTool, tool
 from typing import List, Dict, Optional, Union, Literal
 from tools import (
     get_weather, WeatherArgs,
-    get_map, MapArgs
+    get_map, MapArgs,
+    query_knowledge_base, RagQueryArgs
 )
 
 from langchain_core.messages import HumanMessage
@@ -125,7 +126,11 @@ class QuizAgent:
 請每次回應不超過 100 字，並且要用繁體中文回答。
 
 ## 工具調用
-使用工具「magic_cal」來做魔法算數。
+- 使用工具「magic_cal」來做魔法算數。
+- 使用工具「get_weather」來取得指定台灣城市的天氣資訊。
+- 使用工具「get_map」來搜尋約會場所和餐廳。
+- 使用工具「query_knowledge_base」來查詢戀愛心理學、電影和書籍相關的知識。
+- 使用工具「get_quiz_result」來生成戀愛測驗結果。
 """
 
     def __init__(self, user_id):
@@ -190,6 +195,13 @@ class QuizAgent:
                 name="get_map", 
                 description="搜尋約會場所和餐廳",
                 args_schema=MapArgs
+            ),
+            StructuredTool.from_function(
+                func=query_knowledge_base,
+                name="query_knowledge_base",
+                description="""當使用者提到戀愛心理學、電影或書籍相關的話題時，使用此工具來查詢相關知識。
+                例如：「你知道依戀理論嗎？」、「有推薦的愛情電影嗎？」、「戀愛心理學書籍推薦」等。""",
+                args_schema=RagQueryArgs
             )
         ]
 
@@ -220,7 +232,7 @@ def run(user_id, name, user_input):
     logger.info(f"status: {status}")
     
     if status == 'init':
-        # TODO: 更詳細的引導 - (我原本以為選小八他最後生成的結果會是小八的圖片耶 但最後是小白鼠) 
+        # TODO: 更詳細的引導 - (我原本以為選小八他最後生成的結果會是小八的圖片耶 但最後是小白鼠)
         response = f"Hi {name}～\n歡迎來到單身「吉」地獄！請選擇你喜歡的角色！"
         db.set_user_curr_status(user_id, 'profiling')
         return [
