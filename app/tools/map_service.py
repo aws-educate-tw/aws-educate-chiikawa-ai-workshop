@@ -35,7 +35,7 @@ def get_map(location: str, radius: int = 1000, type: Optional[str] = None,
         返回:
             符合條件的場所列表，包含店家介紹和詳細資訊
         """
-        API_KEY = "AIzaSyAu3hR8Izb_qLRKkxvXMjRggXZmyJ5km88"
+        API_KEY = "API_KEY"
         BASE_URL = "https://maps.googleapis.com/maps/api/place"
         TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 
