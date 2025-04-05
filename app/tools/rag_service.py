@@ -5,7 +5,7 @@ from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from pydantic import BaseModel, Field
 
-model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+model_id = "meta.llama3-70b-instruct-v1:0"
 knowledge_base_id = "NK8AUITM03"
 
 class RagQueryArgs(BaseModel):
@@ -15,7 +15,7 @@ class RagQueryArgs(BaseModel):
 class RagService:
     def __init__(self):
         self.knowledge_base_id = knowledge_base_id
-        self.model_id = model_id,
+        self.model_id = model_id
         self.retriever = None
         self.qa_chain = None
         self._initialize_retriever()

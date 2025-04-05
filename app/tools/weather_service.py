@@ -1,6 +1,10 @@
+import os
 import requests
 from typing import Literal
 from pydantic import BaseModel, Field
+import logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 class WeatherArgs(BaseModel):
     city: Literal[
@@ -11,7 +15,8 @@ class WeatherArgs(BaseModel):
     ] = Field(description="台灣縣市名稱")
 
 def get_weather(city: str) -> str:
-    API_KEY = "API_KEY"
+    logger.info(f"weather tool called. ")
+    API_KEY = os.getenv("WEATHER_API_KEY")
     API_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001"
 
     params = {

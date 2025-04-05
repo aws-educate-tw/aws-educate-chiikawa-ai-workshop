@@ -18,6 +18,10 @@ from langgraph.prebuilt import create_react_agent
 
 model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
 
+import logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
 class Summarizer:
     chat_model = ChatBedrock(
         model_id=model_id,
@@ -106,8 +110,11 @@ def get_quiz_result(user_id):
     db.set_user_curr_status(user_id, 'processing')
     summarizer = Summarizer(user_id)
     lovebrain_score, playboy_score = summarizer.first_summarize()
+    logger.info(f"lovebrain_score {lovebrain_score}, playboy_score {playboy_score}")
     personality = summarizer.second_summarize()
+    logger.info(f"personality {personality}")
 
     image_generator = ImageGenerator()
     image_url = image_generator.generate_image(lovebrain_score, playboy_score, personality, user_id)
+    logger.info(f"image_url {image_url}")
     return image_url

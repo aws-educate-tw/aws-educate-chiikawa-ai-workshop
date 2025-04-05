@@ -1,21 +1,18 @@
+import os
 import requests
 import json
 from typing import List, Dict, Optional, Literal
 from pydantic import BaseModel, Field
 
 class MapArgs(BaseModel):
-    PlaceType = Literal["restaurant", "cafe", "bar", "park", "movie_theater", 
-                    "amusement_park", "art_gallery", "museum", 
-                    "shopping_mall", "tourist_attraction"]
-
-    PriceLevel = Literal[0, 1, 2, 3, 4]
-
     location: str = Field(..., description="位置名稱或地址，可使用自然語言，例如「台南魯肉飯」、「西門町附近的鞋店」")
     radius: int = Field(1000, description="搜尋半徑（米）- 固定為1000米", ge=100, le=50000)
-    type: Optional[PlaceType] = Field(None, description="場所類型，如restaurant、cafe、park等")
+    type: Optional[Literal["restaurant", "cafe", "bar", "park", "movie_theater", 
+                    "amusement_park", "art_gallery", "museum", 
+                    "shopping_mall", "tourist_attraction"]] = Field(None, description="場所類型，如restaurant、cafe、park等")
     keyword: Optional[str] = Field(None, description="關鍵字搜尋")
     min_rating: float = Field(3.0, description="最低評分（0-5）", ge=0, le=5)
-    price_level: Optional[PriceLevel] = Field(None, description="價格等級（0-4，0=免費, 4=非常昂貴）")
+    price_level: Optional[Literal[0, 1, 2, 3, 4]] = Field(None, description="價格等級（0-4，0=免費, 4=非常昂貴）")
     open_now: bool = Field(True, description="是否僅顯示營業中的場所")
 
 def get_map(location: str, radius: int = 1000, type: Optional[str] = None,
@@ -35,7 +32,7 @@ def get_map(location: str, radius: int = 1000, type: Optional[str] = None,
         返回:
             符合條件的場所列表，包含店家介紹和詳細資訊
         """
-        API_KEY = "API_KEY"
+        API_KEY = os.getenv("MAP_API_KEY")
         BASE_URL = "https://maps.googleapis.com/maps/api/place"
         TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 

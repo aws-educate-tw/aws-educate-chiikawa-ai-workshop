@@ -15,7 +15,7 @@ from typing import List, Dict, Optional, Union, Literal
 from tools import (
     get_weather, WeatherArgs,
     get_map, MapArgs,
-    query_knowledge_base, RagQueryArgs
+    query_knowledge_base, RagQueryArgs, get_quiz_result
 )
 
 from langchain_core.messages import HumanMessage
@@ -41,7 +41,7 @@ logger.setLevel(logging.INFO)
 
 bedrock_client = boto3.client('bedrock-runtime')
 
-model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+model_id = "amazon.nova-pro-v1:0"
 
 class Cosplay:
     Chiikawa = {
@@ -126,11 +126,9 @@ class QuizAgent:
 請每次回應不超過 100 字，並且要用繁體中文回答。
 
 ## 工具調用
-- 使用工具「magic_cal」來做魔法算數。
 - 使用工具「get_weather」來取得指定台灣城市的天氣資訊。
 - 使用工具「get_map」來搜尋約會場所和餐廳。
 - 使用工具「query_knowledge_base」來查詢戀愛心理學、電影和書籍相關的知識。
-- 使用工具「get_quiz_result」來生成戀愛測驗結果。
 """
 
     def __init__(self, user_id):
@@ -305,7 +303,8 @@ def run(user_id, name, user_input):
         if len(db.get_user_quiz_messages(user_id)) == 0:
             user_input = "你好！"
         if user_input == "生成我的戀愛測驗結果吧！":
-            image_url = tools.get_quiz_result(user_id)
+            image_url = get_quiz_result(user_id)
+            logger.info(f"image_url_ {image_url}")
             db.set_user_curr_status(user_id, 'quizzing')
             return [
                 TextMessage(text="這是你的戀愛測驗結果！"),
