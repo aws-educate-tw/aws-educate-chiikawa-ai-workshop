@@ -67,7 +67,11 @@ class ImageGenerator:
     def get_image_from_s3(self, object_key):
         # Download image from S3 into memory
         image_stream = io.BytesIO()
-        self.s3.download_fileobj(Bucket=self.asset_bucket_name, Key=object_key, Fileobj=image_stream)
+        self.s3.download_fileobj(
+            Bucket=self.asset_bucket_name,
+            Key=object_key,
+            Fileobj=image_stream
+        )
 
         # Move the stream position to the start
         image_stream.seek(0)

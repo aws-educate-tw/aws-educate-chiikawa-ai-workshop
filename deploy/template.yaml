@@ -4,7 +4,7 @@ Description: "CloudFormation template for Chiikawa Psychological Test LINE Bot W
 Parameters:
   ProjectName:
     Type: String
-    Default: cody-auto-chiikawa
+    Default: chiikawa-ws
     Description: Project name for resource naming
 
   # LINE Bot Configuration when setting stack
@@ -19,6 +19,10 @@ Parameters:
     NoEcho: true
 
 Resources:
+  ####################
+  ###  S3 Buckets  ###
+  ####################
+
   # S3 Bucket for Assets
   AssetsBucket:
     Type: AWS::S3::Bucket
@@ -69,6 +73,24 @@ Resources:
         IgnorePublicAcls: false
         RestrictPublicBuckets: false
 
+  GeneratedImagesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref GeneratedImagesBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action:
+              - s3:GetObject
+            Resource: !Sub arn:aws:s3:::${GeneratedImagesBucket}/*
+
+  ##################
+  ###  DynamoDB  ###
+  ##################
+
   # DynamoDB Table
   ConversationTable:
     Type: AWS::DynamoDB::Table
@@ -84,6 +106,10 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
+
+  #############################
+  ###  IAM Role for Lambda  ###
+  #############################
 
   # IAM Role for Lambda functions
   LambdaIAMRole:
@@ -126,6 +152,7 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:PutObject
+                  - s3:PutObjectAcl
                   - s3:ListBucket
                   - s3:DeleteObject
                 Resource:
@@ -133,6 +160,10 @@ Resources:
                   - !Sub ${GeneratedImagesBucket.Arn}/*
                   - !GetAtt AssetsBucket.Arn
                   - !Sub ${AssetsBucket.Arn}/*
+
+  ################
+  ###  Lambda  ###
+  ################
 
   # Lambda function for handling webhook requests
   LINEBotWebhookHandler:
@@ -150,8 +181,14 @@ Resources:
           TABLE_NAME: !Ref ConversationTable
           CHANNEL_ACCESS_TOKEN: !Ref ChannelAccessToken
           CHANNEL_SECRET: !Ref ChannelSecret
+          ASSET_BUCKET_NAME: !Ref AssetsBucket
+          OUTPUT_BUCKET_NAME: !Ref GeneratedImagesBucket
       Code:
-        ImageUri: !Sub 423623870189.dkr.ecr.us-east-1.amazonaws.com/2025-aws-chiikawa-ai-workshop@sha256:e7342215e3e0e15ec1d2095905ed69f14e0fe99ed34525e283abc88345043f39
+        ImageUri: !Sub 423623870189.dkr.ecr.us-east-1.amazonaws.com/2025-aws-chiikawa-ai-workshop@sha256:503f7588ee21a6ab47b65a29fd3df75da01b0d6992fb846cb91857e6112383e4
+
+  #####################
+  ###  API Gateway  ###
+  #####################
 
   # API Gateway REST API
   ApiGateway:

@@ -22,3 +22,16 @@
 5. 到 LINE Developer 貼上
 
 完成！應該就可以透過 Cloudformation 建立我們要的 LINE Bot 了，其中沒那麼自動化的部分剩上傳 Zip，之後看要不要改成用 S3。
+
+## Docker Deployment
+
+我目前在自己的 AWS 帳號建 ECR 上傳 LINE Bot webhook handler 的 image，然後在 CloudFormation 指定我們的 Lambda 要使用該 image。
+
+在專案根目錄，執行下列命令：
+
+1. `aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 423623870189.dkr.ecr.us-east-1.amazonaws.com`
+2. `docker build --build-arg MAP_API_KEY=[MAP_API_KEY] --build-arg WEATHER_API_KEY=[WEATHER_API_KEY] -t chiikawa-linebot-webhook-handler .`
+3. `docker tag chiikawa-linebot-webhook-handler 423623870189.dkr.ecr.us-east-1.amazonaws.com/2025-aws-chiikawa-ai-workshop:chiikawa-linebot-webhook-handler`
+4. `docker push 423623870189.dkr.ecr.us-east-1.amazonaws.com/2025-aws-chiikawa-ai-workshop:chiikawa-linebot-webhook-handler`
+
+P.S. 前面建立 zip 的步驟就可以省略，直接在 CloudFormation 階段把服務都弄好，後續不需要再上傳 code。

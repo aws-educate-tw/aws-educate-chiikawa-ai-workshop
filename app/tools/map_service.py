@@ -3,6 +3,10 @@ import requests
 import json
 from typing import List, Dict, Optional, Literal
 from pydantic import BaseModel, Field
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 class MapArgs(BaseModel):
     location: str = Field(..., description="位置名稱或地址，可使用自然語言，例如「台南魯肉飯」、「西門町附近的鞋店」")
@@ -32,6 +36,8 @@ def get_map(location: str, radius: int = 1000, type: Optional[str] = None,
         返回:
             符合條件的場所列表，包含店家介紹和詳細資訊
         """
+        logger.info(f"Map tool called.")
+
         API_KEY = os.getenv("MAP_API_KEY")
         BASE_URL = "https://maps.googleapis.com/maps/api/place"
         TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"

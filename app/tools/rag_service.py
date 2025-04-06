@@ -1,12 +1,17 @@
 import boto3
+import os
 from langchain_aws.retrievers import AmazonKnowledgeBasesRetriever
 from langchain_aws import ChatBedrock
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from pydantic import BaseModel, Field
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 model_id = "meta.llama3-70b-instruct-v1:0"
-knowledge_base_id = "NK8AUITM03"
+knowledge_base_id = os.getenv("KNOWLEDGE_BASE_ID")
 
 class RagQueryArgs(BaseModel):
     query: str = Field(description="The query to search the knowledge base")
@@ -43,10 +48,10 @@ class RagService:
         
         請以溫暖、親切但專業的語氣回答，讓用戶感到被理解和受到重視。所有回覆必須使用繁體中文。
         
-        檢索到的信息：
+        搜尋到的訊息或文件：
         {context}
         
-        用戶的問題：{question}
+        使用者的問題：{question}
         
         回覆："""
         
@@ -65,6 +70,8 @@ class RagService:
 
     def query(self, args: RagQueryArgs):
         """RAG query"""
+        logger.info(f"RAG tool called.")
+
         if not self.qa_chain:
             raise ValueError("RAG chain not initialized")
         

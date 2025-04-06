@@ -15,7 +15,7 @@ class WeatherArgs(BaseModel):
     ] = Field(description="台灣縣市名稱")
 
 def get_weather(city: str) -> str:
-    logger.info(f"weather tool called. ")
+    logger.info(f"Weather tool called.")
     API_KEY = os.getenv("WEATHER_API_KEY")
     API_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001"
 

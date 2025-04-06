@@ -4,7 +4,7 @@ Description: "CloudFormation template for Chiikawa Psychological Test LINE Bot W
 Parameters:
   ProjectName:
     Type: String
-    Default: cody-auto-chiikawa
+    Default: chiikawa-ws
     Description: Project name for resource naming
 
   # LINE Bot Configuration when setting stack
@@ -19,6 +19,10 @@ Parameters:
     NoEcho: true
 
 Resources:
+  ####################
+  ###  S3 Buckets  ###
+  ####################
+
   # S3 Bucket for Assets
   AssetsBucket:
     Type: AWS::S3::Bucket
@@ -83,6 +87,10 @@ Resources:
               - s3:GetObject
             Resource: !Sub arn:aws:s3:::${GeneratedImagesBucket}/*
 
+  ##################
+  ###  DynamoDB  ###
+  ##################
+
   # DynamoDB Table
   ConversationTable:
     Type: AWS::DynamoDB::Table
@@ -98,6 +106,10 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
+
+  #############################
+  ###  IAM Role for Lambda  ###
+  #############################
 
   # IAM Role for Lambda functions
   LambdaIAMRole:
@@ -140,6 +152,7 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:PutObject
+                  - s3:PutObjectAcl
                   - s3:ListBucket
                   - s3:DeleteObject
                 Resource:
@@ -147,6 +160,10 @@ Resources:
                   - !Sub ${GeneratedImagesBucket.Arn}/*
                   - !GetAtt AssetsBucket.Arn
                   - !Sub ${AssetsBucket.Arn}/*
+
+  ################
+  ###  Lambda  ###
+  ################
 
   # Lambda function for handling webhook requests
   LINEBotWebhookHandler:
@@ -172,6 +189,10 @@ Resources:
               'statusCode': 200,
               'body': 'This is a dummy method, replace it.'
             }
+
+  #####################
+  ###  API Gateway  ###
+  #####################
 
   # API Gateway REST API
   ApiGateway:

@@ -197,8 +197,7 @@ class QuizAgent:
             StructuredTool.from_function(
                 func=query_knowledge_base,
                 name="query_knowledge_base",
-                description="""當使用者提到戀愛心理學、電影或書籍相關的話題時，使用此工具來查詢相關知識。
-                例如：「你知道依戀理論嗎？」、「有推薦的愛情電影嗎？」、「戀愛心理學書籍推薦」等。""",
+                description="搜尋戀愛書籍、電影",
                 args_schema=RagQueryArgs
             )
         ]
