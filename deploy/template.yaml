@@ -26,7 +26,7 @@ Resources:
   # S3 Bucket for Assets
   AssetsBucket:
     Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
+    DeletionPolicy: Delete
     Properties:
       BucketName: !Sub ${ProjectName}-static-assets-${AWS::AccountId}
       CorsConfiguration:
@@ -51,7 +51,7 @@ Resources:
   # S3 Bucket for Generated Images
   GeneratedImagesBucket:
     Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
+    DeletionPolicy: Delete
     Properties:
       BucketName: !Sub ${ProjectName}-generated-images-${AWS::AccountId}
       CorsConfiguration:
