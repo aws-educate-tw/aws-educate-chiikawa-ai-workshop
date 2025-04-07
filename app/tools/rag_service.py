@@ -6,12 +6,58 @@ from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from pydantic import BaseModel, Field
 import logging
+from typing import Optional, Dict, Any
+from botocore.exceptions import BotoCoreError, ClientError
+import time
+from functools import wraps
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 model_id = "meta.llama3-70b-instruct-v1:0"
 knowledge_base_id = os.getenv("KNOWLEDGE_BASE_ID")
+
+# 自定義異常類別
+class RAGServiceError(Exception):
+    """Base exception class for RAG service errors"""
+    pass
+
+class KnowledgeBaseInitError(RAGServiceError):
+    """Raised when knowledge base initialization fails"""
+    pass
+
+class QueryProcessingError(RAGServiceError):
+    """Raised when query processing fails"""
+    pass
+
+class ModelError(RAGServiceError):
+    """Raised when LLM encounters an error"""
+    pass
+
+# 重試裝飾器
+def retry_with_exponential_backoff(
+    max_retries: int = 3,
+    initial_delay: float = 1,
+    exponential_base: float = 2,
+    max_delay: float = 10
+):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            delay = initial_delay
+            for retry in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except (BotoCoreError, ClientError) as e:
+                    if retry == max_retries - 1:
+                        logger.error(f"Max retries ({max_retries}) reached. Final error: {str(e)}")
+                        raise
+                    logger.warning(f"Attempt {retry + 1} failed: {str(e)}. Retrying...")
+                    time.sleep(min(delay, max_delay))
+                    delay *= exponential_base
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 class RagQueryArgs(BaseModel):
     query: str = Field(description="The query to search the knowledge base")
@@ -27,14 +73,20 @@ class RagService:
         self._initialize_qa_chain()
 
     def _initialize_retriever(self):
-        self.retriever = AmazonKnowledgeBasesRetriever(
-            knowledge_base_id=self.knowledge_base_id,
-            retrieval_config={
-                "vectorSearchConfiguration": {
-                    "numberOfResults": 5  # Discussible
+        try:
+            logger.info("Initializing knowledge base retriever...")
+            self.retriever = AmazonKnowledgeBasesRetriever(
+                knowledge_base_id=self.knowledge_base_id,
+                retrieval_config={
+                    "vectorSearchConfiguration": {
+                        "numberOfResults": 5
+                    }
                 }
-            }
-        )
+            )
+            logger.info("Knowledge base retriever initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize retriever: {str(e)}")
+            raise KnowledgeBaseInitError(f"Retriever initialization failed: {str(e)}")
 
     def _initialize_qa_chain(self):
         llm = ChatBedrock(
@@ -60,36 +112,87 @@ class RagService:
             input_variables=["context", "question"]
         )
 
-        self.qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=self.retriever,
-            chain_type_kwargs={"prompt": prompt},
-            return_source_documents=True
-        )
+            self.qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=self.retriever,
+                chain_type_kwargs={"prompt": prompt},
+                return_source_documents=True
+            )
+            logger.info("QA chain initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize QA chain: {str(e)}")
+            raise KnowledgeBaseInitError(f"QA chain initialization failed: {str(e)}")
 
-    def query(self, args: RagQueryArgs):
-        """RAG query"""
-        logger.info(f"RAG tool called.")
+    @retry_with_exponential_backoff()
+    def query(self, args: RagQueryArgs) -> Dict[str, Any]:
+        """RAG query with error handling and logging"""
+        logger.info(f"Processing RAG query: {args.query}")
 
-        if not self.qa_chain:
-            raise ValueError("RAG chain not initialized")
-        
-        self.retriever.retrieval_config["vectorSearchConfiguration"]["numberOfResults"] = args.max_results
+        try:
+            if not self.qa_chain:
+                raise QueryProcessingError("RAG chain not initialized")
+            
+            if not args.query.strip():
+                raise ValueError("Query cannot be empty")
+            
+            if args.max_results < 1:
+                raise ValueError("max_results must be greater than 0")
 
-        result = self.qa_chain({"query": args.query})
+            self.retriever.retrieval_config["vectorSearchConfiguration"]["numberOfResults"] = args.max_results
 
-        response = {
-            "answer": result["answer"],
-            "sources": [doc.metadata.get("source", "Unknown") for doc in result["source_documents"]]
-        }
+            result = self.qa_chain({"query": args.query})
 
-        return response
-    
+            response = {
+                "answer": result.get("answer", "No answer generated"),
+                "sources": [doc.metadata.get("source", "Unknown") for doc in result.get("source_documents", [])],
+                "status": "success"
+            }
+
+            logger.info(f"Query processed successfully. Found {len(response['sources'])} sources")
+            return response
+
+        except ValueError as e:
+            logger.error(f"Invalid input parameters: {str(e)}")
+            return {
+                "answer": f"查詢參數錯誤：{str(e)}",
+                "sources": [],
+                "status": "error",
+                "error_type": "validation_error"
+            }
+
+        except (BotoCoreError, ClientError) as e:
+            logger.error(f"AWS service error: {str(e)}")
+            return {
+                "answer": "抱歉，查詢服務暫時無法使用，請稍後再試。",
+                "sources": [],
+                "status": "error",
+                "error_type": "aws_service_error"
+            }
+
+        except Exception as e:
+            logger.error(f"Unexpected error during query processing: {str(e)}")
+            return {
+                "answer": "處理查詢時發生意外錯誤，請稍後重試。",
+                "sources": [],
+                "status": "error",
+                "error_type": "unexpected_error"
+            }
+
 _rag_service = RagService()
 
-def query_knowledge_base(args: RagQueryArgs):
-    """Wrapper function for the RAG service query"""
-    return _rag_service.query(args)
+def query_knowledge_base(args: RagQueryArgs) -> Dict[str, Any]:
+    """Wrapper function for the RAG service query with error handling"""
+    try:
+        logger.info(f"RAG tool called with query: {args.query}")
+        return _rag_service.query(args)
+    except Exception as e:
+        logger.error(f"Error in query_knowledge_base wrapper: {str(e)}")
+        return {
+            "answer": "很抱歉，知識庫查詢服務暫時無法使用。請稍後再試。",
+            "sources": [],
+            "status": "error",
+            "error_type": "service_error"
+        }
 
 __all__ = ['query_knowledge_base', 'RagQueryArgs']
