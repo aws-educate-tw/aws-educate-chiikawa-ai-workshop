@@ -184,7 +184,7 @@ Resources:
           ASSET_BUCKET_NAME: !Ref AssetsBucket
           OUTPUT_BUCKET_NAME: !Ref GeneratedImagesBucket
       Code:
-        ImageUri: !Sub 423623870189.dkr.ecr.us-east-1.amazonaws.com/2025-aws-chiikawa-ai-workshop@sha256:d200b1bd1b7b42196a121866c21be03f3a9b26dbfd5990324a5b75ec76b2c445
+        ImageUri: !Sub 423623870189.dkr.ecr.us-east-1.amazonaws.com/2025-aws-chiikawa-ai-workshop@sha256:afaf68e9ccc2a58b43d08bd0484d85e8ba65a9185e46ed35c90c62f4673c8627
 
   #####################
   ###  API Gateway  ###
