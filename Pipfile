@@ -10,6 +10,10 @@ line-bot-sdk = "*"
 flask = "*"
 python-dotenv = "*"
 boto3 = "*"
+langchain = "*"
+langgraph = "*"
+langgraph-checkpoint-aws = "*"
+langchain-aws = "*"
 
 [dev-packages]
 pandas = "*"
