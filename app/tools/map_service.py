@@ -11,9 +11,7 @@ logger.setLevel(logging.INFO)
 class MapArgs(BaseModel):
     location: str = Field(..., description="位置名稱或地址，可使用自然語言，例如「台南魯肉飯」、「西門町附近的鞋店」")
     radius: int = Field(1000, description="搜尋半徑（米）- 固定為1000米", ge=100, le=50000)
-    type: Optional[Literal["restaurant", "cafe", "bar", "park", "movie_theater", 
-                    "amusement_park", "art_gallery", "museum", 
-                    "shopping_mall", "tourist_attraction"]] = Field(None, description="場所類型，如restaurant、cafe、park等")
+    type: Optional[str] = Field(None, description="場所類型，只能有以下幾種類別：restaurant, cafe, bar, park, movie_theater, amusement_park, art_gallery, museum, shopping_mall, tourist_attraction等")
     keyword: Optional[str] = Field(None, description="關鍵字搜尋")
     min_rating: float = Field(3.0, description="最低評分（0-5）", ge=0, le=5)
     price_level: Optional[Literal[0, 1, 2, 3, 4]] = Field(None, description="價格等級（0-4，0=免費, 4=非常昂貴）")
@@ -102,11 +100,11 @@ def get_map(location: str, radius: int = 1000, type: Optional[str] = None,
             else:
                 place_info["description"] = "暫無店家介紹"    
 
-            if 'googleMapsUri' in place:
-                place_info["maps_url"] = place['googleMapsUri']
+            # if 'googleMapsUri' in place:
+            #     place_info["maps_url"] = place['googleMapsUri']
             
-            if 'websiteUri' in place:
-                place_info["website"] = place['websiteUri']
+            # if 'websiteUri' in place:
+            #     place_info["website"] = place['websiteUri']
             
             if 'reviews' in place and place['reviews']:
                 place_info["reviews"] = []
@@ -120,17 +118,17 @@ def get_map(location: str, radius: int = 1000, type: Optional[str] = None,
                     }
                     place_info["reviews"].append(review_info)
             
-            if 'location' in place:
-                place_info["location"] = {
-                    "lat": place['location']['latitude'],
-                    "lng": place['location']['longitude']
-                }
+            # if 'location' in place:
+            #     place_info["location"] = {
+            #         "lat": place['location']['latitude'],
+            #         "lng": place['location']['longitude']
+            #     }
             
-            if 'photos' in place and place['photos']:
-                photo_name = place['photos'][0]['name']
-                photo_id = photo_name.split('/')[-1]
-                place_info["photo"] = f"{BASE_URL}/photo?maxwidth=400&photo_reference={photo_id}&key={API_KEY}"
+            # if 'photos' in place and place['photos']:
+            #     photo_name = place['photos'][0]['name']
+            #     photo_id = photo_name.split('/')[-1]
+            #     place_info["photo"] = f"{BASE_URL}/photo?maxwidth=400&photo_reference={photo_id}&key={API_KEY}"
             
             results.append(place_info)
-                
+        print(f"Results: {results}")
         return results
