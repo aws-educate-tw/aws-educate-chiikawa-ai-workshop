@@ -1,12 +1,16 @@
+import os
 import boto3
 from langchain_aws.retrievers import AmazonKnowledgeBasesRetriever
 from langchain_aws import ChatBedrock
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from pydantic import BaseModel, Field
+import logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 model_id = "meta.llama3-70b-instruct-v1:0"
-knowledge_base_id = "NK8AUITM03"
+knowledge_base_id = os.getenv("KNOWLEDGE_BASE_ID")
 
 class RagQueryArgs(BaseModel):
     query: str = Field(description="The query to search the knowledge base")
@@ -65,16 +69,17 @@ class RagService:
 
     def query(self, query: str, max_results: int = 5):
         """RAG query"""
+        logger.info(f"Querying knowledge base with query: {query}")
         if not self.qa_chain:
             raise ValueError("RAG chain not initialized")
         
-        self.retriever.retrieval_config["vectorSearchConfiguration"]["numberOfResults"] = max_results
+        self.retriever.retrieval_config.vectorSearchConfiguration.numberOfResults = max_results
 
         result = self.qa_chain({"query": query})
+        print("result", result)
 
         response = {
-            "answer": result["answer"],
-            "sources": [doc.metadata.get("source", "Unknown") for doc in result["source_documents"]]
+            "answer": result["result"],
         }
 
         return response
