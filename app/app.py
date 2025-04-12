@@ -289,13 +289,10 @@ def run(user_id, name, user_input):
                 template=ConfirmTemplate(
                         # text=f'你選擇了{user_input}！現在，讓我們進入荒島戀愛情境，開始你的浪漫冒險吧！',
                         text = f'''你選擇了「{user_input}」！
-
                         你來到了名為「地獄島」的愛情實境秀，
                         每一次選擇，都是戀愛心理的大冒險！
-
                         只有先了解自己內心的愛情密碼，
                         才能找到通往「天堂」的路！
-
                         試試這個戀愛心理測驗，
                         聊聊妳的心唄♡''',
                         actions=[
