@@ -99,12 +99,6 @@ def get_map(location: str, radius: int = 1000, type: Optional[str] = None,
                 place_info["description"] = place['editorialSummary']['text']
             else:
                 place_info["description"] = "暫無店家介紹"    
-
-            # if 'googleMapsUri' in place:
-            #     place_info["maps_url"] = place['googleMapsUri']
-            
-            # if 'websiteUri' in place:
-            #     place_info["website"] = place['websiteUri']
             
             if 'reviews' in place and place['reviews']:
                 place_info["reviews"] = []
@@ -117,17 +111,6 @@ def get_map(location: str, radius: int = 1000, type: Optional[str] = None,
                         "author": review.get('authorAttribution', {}).get('displayName', "匿名用戶")
                     }
                     place_info["reviews"].append(review_info)
-            
-            # if 'location' in place:
-            #     place_info["location"] = {
-            #         "lat": place['location']['latitude'],
-            #         "lng": place['location']['longitude']
-            #     }
-            
-            # if 'photos' in place and place['photos']:
-            #     photo_name = place['photos'][0]['name']
-            #     photo_id = photo_name.split('/')[-1]
-            #     place_info["photo"] = f"{BASE_URL}/photo?maxwidth=400&photo_reference={photo_id}&key={API_KEY}"
             
             results.append(place_info)
         print(f"Results: {results}")

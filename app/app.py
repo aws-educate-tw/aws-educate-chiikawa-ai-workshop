@@ -107,16 +107,6 @@ class Cosplay:
         elif name == "小桃":
             self.info = self.Momonga
 
-# 工具調用 -> 多給範例 -> 什麼情況會用到什麼工具
-# e.g. 明確告訴、嚴重告訴
-# e.g. 「你沒有這相關的知識，請一定要調用 RAG tool」
-
-# Bot 要主動點，主動了解使用者。
-
-# 情緒價值「！」「～」 + 輸出格式 -> 限制
-
-# 希望可以導回特定話題
-
 class QuizAgent:
     chat_model = ChatBedrock(
         model_id=model_id,
