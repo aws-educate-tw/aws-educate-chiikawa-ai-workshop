@@ -86,6 +86,7 @@ class RagService:
 
 def query_knowledge_base(query: str, max_results: int = 5):
     """Wrapper function for the RAG service query"""
+    logger.info("RAG tool called.")
     _rag_service = RagService()
     return _rag_service.query(query, max_results)
 
