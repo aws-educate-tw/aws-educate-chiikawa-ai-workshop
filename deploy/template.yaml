@@ -18,6 +18,10 @@ Parameters:
     Description: LINE Bot Channel Secret
     NoEcho: true
 
+  UserSuffix:
+    Type: String
+    Description: For avoiding S3 bucket name conflicts
+
 Resources:
   ####################
   ###  S3 Buckets  ###
@@ -28,7 +32,7 @@ Resources:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
     Properties:
-      BucketName: !Sub ${ProjectName}-static-assets-${AWS::AccountId}
+      BucketName: !Sub ${ProjectName}-static-assets-${AWS::AccountId}-${UserSuffix}
       CorsConfiguration:
         CorsRules:
           - AllowedHeaders:
@@ -53,7 +57,7 @@ Resources:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
     Properties:
-      BucketName: !Sub ${ProjectName}-generated-images-${AWS::AccountId}
+      BucketName: !Sub ${ProjectName}-generated-images-${AWS::AccountId}-${UserSuffix}
       CorsConfiguration:
         CorsRules:
           - AllowedHeaders:
