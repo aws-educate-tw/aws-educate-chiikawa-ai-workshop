@@ -1,17 +1,12 @@
 import boto3
-import os
 from langchain_aws.retrievers import AmazonKnowledgeBasesRetriever
 from langchain_aws import ChatBedrock
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from pydantic import BaseModel, Field
-import logging
-
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
 
 model_id = "meta.llama3-70b-instruct-v1:0"
-knowledge_base_id = os.getenv("KNOWLEDGE_BASE_ID")
+knowledge_base_id = "NK8AUITM03"
 
 class RagQueryArgs(BaseModel):
     query: str = Field(description="The query to search the knowledge base")
@@ -48,10 +43,10 @@ class RagService:
         
         請以溫暖、親切但專業的語氣回答，讓用戶感到被理解和受到重視。所有回覆必須使用繁體中文。
         
-        搜尋到的訊息或文件：
+        檢索到的信息：
         {context}
         
-        使用者的問題：{question}
+        用戶的問題：{question}
         
         回覆："""
         
@@ -68,16 +63,14 @@ class RagService:
             return_source_documents=True
         )
 
-    def query(self, args: RagQueryArgs):
+    def query(self, query: str, max_results: int = 5):
         """RAG query"""
-        logger.info(f"RAG tool called.")
-
         if not self.qa_chain:
             raise ValueError("RAG chain not initialized")
         
-        self.retriever.retrieval_config["vectorSearchConfiguration"]["numberOfResults"] = args.max_results
+        self.retriever.retrieval_config["vectorSearchConfiguration"]["numberOfResults"] = max_results
 
-        result = self.qa_chain({"query": args.query})
+        result = self.qa_chain({"query": query})
 
         response = {
             "answer": result["answer"],
@@ -85,11 +78,10 @@ class RagService:
         }
 
         return response
-    
-_rag_service = RagService()
 
-def query_knowledge_base(args: RagQueryArgs):
+def query_knowledge_base(query: str, max_results: int = 5):
     """Wrapper function for the RAG service query"""
-    return _rag_service.query(args)
+    _rag_service = RagService()
+    return _rag_service.query(query, max_results)
 
 __all__ = ['query_knowledge_base', 'RagQueryArgs']
