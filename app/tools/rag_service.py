@@ -68,16 +68,16 @@ class RagService:
             return_source_documents=True
         )
 
-    def query(self, args: RagQueryArgs):
+    def query(self, query: str, max_results: int = 5):
         """RAG query"""
         logger.info(f"RAG tool called.")
 
         if not self.qa_chain:
             raise ValueError("RAG chain not initialized")
         
-        self.retriever.retrieval_config["vectorSearchConfiguration"]["numberOfResults"] = args.max_results
+        self.retriever.retrieval_config["vectorSearchConfiguration"]["numberOfResults"] = max_results
 
-        result = self.qa_chain({"query": args.query})
+        result = self.qa_chain({"query": query})
 
         response = {
             "answer": result["answer"],
@@ -88,8 +88,8 @@ class RagService:
     
 _rag_service = RagService()
 
-def query_knowledge_base(args: RagQueryArgs):
+def query_knowledge_base(query: str, max_results: int = 5):
     """Wrapper function for the RAG service query"""
-    return _rag_service.query(args)
+    return _rag_service.query(query, max_results)
 
 __all__ = ['query_knowledge_base', 'RagQueryArgs']
